@@ -1,0 +1,9 @@
+/target/
+**/target/
+.idea/
+.vscode/
+*.swp
+.DS_Store
+.env
+crates/*/tests/
+*.log

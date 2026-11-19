@@ -1,0 +1,46 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![allow(
+    clippy::struct_excessive_bools,
+    reason = "model types mirror Discord's JSON objects field by field"
+)]
+
+mod macros;
+mod serde_util;
+
+pub mod application;
+pub mod application_command;
+pub mod application_identity_profile;
+pub mod application_role_connection_metadata;
+pub mod audit_log;
+pub mod auto_moderation;
+pub mod channel;
+pub mod component;
+pub mod emoji;
+pub mod entitlement;
+pub mod gateway;
+pub mod guild;
+pub mod guild_scheduled_event;
+pub mod guild_template;
+pub mod id;
+pub mod interaction;
+pub mod invite;
+pub mod lobby;
+pub mod message;
+pub mod oauth2;
+pub mod permissions;
+pub mod poll;
+pub mod rest;
+pub mod sku;
+pub mod soundboard;
+pub mod stage_instance;
+pub mod sticker;
+pub mod subscription;
+pub mod team;
+pub mod user;
+pub mod util;
+pub mod voice;
+pub mod webhook;
+pub mod webhook_event;
+
+pub const DISCORD_API_VERSION: u8 = 10;
+pub const TRACKED_DISCORD_JS: &str = "14.28.1";

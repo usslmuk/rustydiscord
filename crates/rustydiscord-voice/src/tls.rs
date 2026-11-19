@@ -1,0 +1,48 @@
+use std::sync::Arc;
+
+use tokio_websockets::Connector;
+
+pub(crate) fn connector() -> Connector {
+    let config = rustls::ClientConfig::builder_with_provider(Arc::new(
+        rustls::crypto::ring::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .expect("the ring provider supports the default protocol versions")
+    .with_root_certificates(root_store())
+    .with_no_client_auth();
+    Connector::Rustls(tokio_rustls::TlsConnector::from(Arc::new(config)))
+}
+
+pub(crate) fn root_store() -> rustls::RootCertStore {
+    let mut roots = rustls::RootCertStore::empty();
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    #[cfg(feature = "native-roots")]
+    add_native_roots(&mut roots);
+    roots
+}
+
+#[cfg(feature = "native-roots")]
+fn add_native_roots(roots: &mut rustls::RootCertStore) {
+    let loaded = rustls_native_certs::load_native_certs();
+    for error in &loaded.errors {
+        tracing::warn!(%error, "could not load system root certificates");
+    }
+    let (added, ignored) = roots.add_parsable_certificates(loaded.certs);
+    if ignored > 0 {
+        tracing::warn!(
+            ignored,
+            "skipped system root certificates that could not be parsed"
+        );
+    }
+    tracing::debug!(added, "trusting system root certificates");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::root_store;
+
+    #[test]
+    fn bundled_roots_are_always_trusted() {
+        assert!(root_store().len() >= webpki_roots::TLS_SERVER_ROOTS.len());
+    }
+}

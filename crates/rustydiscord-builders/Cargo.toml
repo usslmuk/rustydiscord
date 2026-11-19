@@ -1,0 +1,28 @@
+[package]
+name = "rustydiscord-builders"
+description = "Validated builders for Discord embeds, application commands, components and modals"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/usslmuk/rustydiscord/tree/main/crates/rustydiscord-builders"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+compact_str = { workspace = true, features = ["std"] }
+rustydiscord-model.workspace = true
+
+[dev-dependencies]
+divan.workspace = true
+serde_json.workspace = true
+
+[[bench]]
+name = "builders"
+harness = false
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

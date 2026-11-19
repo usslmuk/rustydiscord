@@ -1,0 +1,44 @@
+[package]
+name = "rustydiscord-voice"
+description = "Discord voice for rustydiscord: calls, tracks and end-to-end encrypted audio"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/usslmuk/rustydiscord/tree/main/crates/rustydiscord-voice"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[features]
+native-roots = ["dep:rustls-native-certs"]
+
+[dependencies]
+aes-gcm = { workspace = true, features = ["aes"] }
+chacha20poly1305.workspace = true
+davey.workspace = true
+rustydiscord-model.workspace = true
+fastrand.workspace = true
+futures-util = { workspace = true, features = ["sink", "std"] }
+opus2.workspace = true
+rustls = { workspace = true, features = ["ring", "std", "tls12"] }
+rustls-native-certs = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "process", "rt", "sync", "time"] }
+tokio-rustls = { workspace = true, features = ["ring", "tls12"] }
+tokio-websockets = { workspace = true, features = ["client", "fastrand", "ring", "rustls-bring-your-own-connector"] }
+tracing = { workspace = true, features = ["std"] }
+webpki-roots.workspace = true
+
+[dev-dependencies]
+openmls.workspace = true
+openmls_basic_credential.workspace = true
+openmls_rust_crypto.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
+tokio-websockets = { workspace = true, features = ["server"] }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

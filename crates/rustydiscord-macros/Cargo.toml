@@ -1,0 +1,15 @@
+[package]
+name = "rustydiscord-macros"
+description = "Attribute macros for rustydiscord bots"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/usslmuk/rustydiscord/tree/main/crates/rustydiscord-macros"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lib]
+proc-macro = true
+
+[lints]
+workspace = true

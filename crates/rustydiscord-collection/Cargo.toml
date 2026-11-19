@@ -1,0 +1,28 @@
+[package]
+name = "rustydiscord-collection"
+description = "A feature-rich map type with folds and iteration helpers"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/usslmuk/rustydiscord/tree/main/crates/rustydiscord-collection"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+foldhash.workspace = true
+indexmap.workspace = true
+
+[dev-dependencies]
+divan.workspace = true
+indexmap.workspace = true
+
+[[bench]]
+name = "collection"
+harness = false
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

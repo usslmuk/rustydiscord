@@ -1,0 +1,60 @@
+[package]
+name = "rustydiscord-rest"
+description = "Rate-limit-aware Discord REST client with per-bucket rate limiting"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/usslmuk/rustydiscord/tree/main/crates/rustydiscord-rest"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[features]
+metrics = []
+default = ["hyper"]
+hyper = [
+  "dep:http-body-util",
+  "dep:hyper",
+  "dep:hyper-rustls",
+  "dep:hyper-util",
+  "dep:rustls",
+  "dep:webpki-roots",
+]
+native-roots = ["hyper", "dep:rustls-native-certs"]
+
+[dependencies]
+bytes.workspace = true
+rustydiscord-model.workspace = true
+http.workspace = true
+http-body-util = { workspace = true, optional = true }
+hyper = { workspace = true, features = ["client", "http1", "http2"], optional = true }
+hyper-rustls = { workspace = true, features = ["http1", "http2", "ring", "tls12"], optional = true }
+hyper-util = { workspace = true, features = ["client-legacy", "http1", "http2", "tokio"], optional = true }
+rustls = { workspace = true, features = ["ring", "std", "tls12"], optional = true }
+rustls-native-certs = { workspace = true, optional = true }
+serde = { workspace = true, features = ["std"] }
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
+tracing = { workspace = true, features = ["std"] }
+webpki-roots = { workspace = true, optional = true }
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+web-time.workspace = true
+
+[dev-dependencies]
+divan.workspace = true
+http-body-util.workspace = true
+hyper = { workspace = true, features = ["server", "http1"] }
+hyper-util = { workspace = true, features = ["tokio"] }
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "test-util"] }
+
+[[bench]]
+name = "request"
+harness = false
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
