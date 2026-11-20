@@ -1,71 +1,187 @@
-[workspace]
-resolver = "3"
-members = ["crates/*"]
-
-[workspace.package]
-version = "0.0.2"
+[package]
+name = "rustydiscord"
+description = "The fastest and most complete Rust library for the Discord API"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/usslmuk/rustydiscord"
+keywords = ["discord-bot", "discord-api", "discord-api-v10", "discord-rust", "discord-gateway"]
+categories = ["api-bindings", "asynchronous", "network-programming"]
+version = "0.0.3"
 edition = "2024"
 rust-version = "1.100.0"
-repository = "https://github.com/usslmuk/rustydiscord"
 
-[workspace.dependencies]
-rustydiscord-builders = { path = "crates/rustydiscord-builders", version = "0.0.2" }
-rustydiscord-brokers = { path = "crates/rustydiscord-brokers", version = "0.0.2" }
-rustydiscord-cache = { path = "crates/rustydiscord-cache", version = "0.0.2" }
-rustydiscord-collection = { path = "crates/rustydiscord-collection", version = "0.0.2" }
-rustydiscord-formatters = { path = "crates/rustydiscord-formatters", version = "0.0.2" }
-rustydiscord-gateway = { path = "crates/rustydiscord-gateway", version = "0.0.2", default-features = false }
-rustydiscord-macros = { path = "crates/rustydiscord-macros", version = "0.0.2" }
-rustydiscord-model = { path = "crates/rustydiscord-model", version = "0.0.2" }
-rustydiscord-opcodes = { path = "crates/rustydiscord-opcodes", version = "0.0.2" }
-rustydiscord-proxy = { path = "crates/rustydiscord-proxy", version = "0.0.2" }
-rustydiscord-rest = { path = "crates/rustydiscord-rest", version = "0.0.2", default-features = false }
-rustydiscord-util = { path = "crates/rustydiscord-util", version = "0.0.2" }
-rustydiscord-voice = { path = "crates/rustydiscord-voice", version = "0.0.2" }
+[features]
+default = ["gateway", "hyper", "zlib-stream"]
+hyper = [
+    "dep:http-body-util",
+    "dep:hyper",
+    "dep:hyper-rustls",
+    "dep:hyper-util",
+    "dep:rustls",
+    "dep:webpki-roots",
+]
+native-roots = ["dep:rustls-native-certs"]
+gateway = [
+    "dep:tokio-websockets",
+    "dep:tokio-rustls",
+    "dep:rustls",
+    "dep:webpki-roots",
+    "dep:fastrand",
+    "hyper",
+]
+zlib-stream = ["gateway", "dep:flate2"]
+zstd-stream = ["gateway", "dep:zstd"]
+etf = ["gateway", "dep:eetf", "dep:num-bigint", "dep:num-traits"]
+voice = [
+    "gateway",
+    "dep:aes-gcm",
+    "dep:chacha20poly1305",
+    "dep:davey",
+    "dep:opus2",
+    "dep:tokio-rustls",
+]
+sharding = ["gateway", "tokio/io-util", "tokio/net", "tokio/process"]
+http-interactions = ["dep:ed25519-dalek"]
 
-aes-gcm = { version = "0.11.1", default-features = false }
+[dependencies]
+aes-gcm = { version = "0.11.1", default-features = false, features = ["aes"], optional = true }
 bitflags = "2.13.2"
 bytes = "1.12.2"
-chacha20poly1305 = { version = "0.11.0", default-features = false }
-compact_str = { version = "0.10.0", default-features = false }
+chacha20poly1305 = { version = "0.11.0", default-features = false, optional = true }
+compact_str = { version = "0.10.0", default-features = false, features = ["std", "serde"] }
 dashmap = { version = "6.2.1", default-features = false }
-davey = "0.2.0"
-ed25519-dalek = { version = "3.0.0", default-features = false }
-eetf = { version = "0.12", default-features = false }
-divan = "0.1.21"
-fastrand = "2.5.0"
-flate2 = { version = "1.1.11", default-features = false }
+davey = { version = "0.2.0", optional = true }
+eetf = { version = "0.12", default-features = false, optional = true }
+fastrand = { version = "2.5.0", optional = true }
+flate2 = { version = "1.1.11", default-features = false, features = ["zlib-rs"], optional = true }
 foldhash = { version = "0.2.0", default-features = false, features = ["std"] }
 futures-core = { version = "0.3.34", default-features = false }
-futures-util = { version = "0.3.34", default-features = false }
+futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
 http = "1.5.0"
-http-body-util = "0.1.5"
-hyper = { version = "1.12.0", default-features = false }
-hyper-rustls = { version = "0.27.10", default-features = false }
-hyper-util = { version = "0.1.21", default-features = false }
+http-body-util = { version = "0.1.5", optional = true }
+hyper = { version = "1.12.0", default-features = false, features = ["client", "http1", "http2"], optional = true }
+hyper-rustls = { version = "0.27.10", default-features = false, features = ["http1", "http2", "ring", "tls12"], optional = true }
+hyper-util = { version = "0.1.21", default-features = false, features = ["client-legacy", "http1", "http2", "tokio"], optional = true }
 indexmap = { version = "2.14.2", default-features = false, features = ["std"] }
-mimalloc = { version = "0.1.52", default-features = false }
-num-bigint = { version = "0.4", default-features = false }
-num-traits = { version = "0.2.19", default-features = false }
+num-bigint = { version = "0.4", default-features = false, optional = true }
+num-traits = { version = "0.2.19", default-features = false, optional = true }
+opus2 = { version = "0.4.0", default-features = false, features = ["backend-libopus", "bundled", "static"], optional = true }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"], optional = true }
+rustls-native-certs = { version = "0.8.5", optional = true }
+serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", default-features = false, features = ["fs", "io-util", "macros", "net", "process", "rt", "sync", "time"] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12"], optional = true }
+tokio-websockets = { version = "0.13.3", default-features = false, features = ["client", "fastrand", "ring", "rustls-bring-your-own-connector"], optional = true }
+tracing = { version = "0.1.44", default-features = false, features = ["std"] }
+ed25519-dalek = { version = "3.0.0", default-features = false, features = ["fast"], optional = true }
+webpki-roots = { version = "1.0.12", optional = true }
+zstd = { version = "0.14.4", default-features = false, optional = true }
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+web-time = "1.1.0"
+
+[dev-dependencies]
+bytes = "1.12.2"
+divan = "0.1.21"
+ed25519-dalek = "3.0.0"
+futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
+http-body-util = "0.1.5"
+hyper = { version = "1.12.0", default-features = false, features = ["server", "http1"] }
+hyper-util = { version = "0.1.21", default-features = false, features = ["tokio"] }
+mimalloc = "0.1.52"
 openmls = "0.8.3"
 openmls_basic_credential = "0.5.0"
 openmls_rust_crypto = "0.5.1"
-opus2 = { version = "0.4.0", default-features = false, features = ["backend-libopus", "bundled", "static"] }
-rustls = { version = "0.23.46", default-features = false }
-rustls-native-certs = "0.8.5"
-serde = { version = "1.0.229", default-features = false }
+serde = { version = "1.0.229", default-features = false, features = ["std"] }
 serde_json = "1.0.154"
-thiserror = "2.0.21"
-tokio = { version = "1.54.1", default-features = false }
-tokio-rustls = { version = "0.26.6", default-features = false }
-tokio-websockets = { version = "0.13.3", default-features = false }
-tracing = { version = "0.1.44", default-features = false }
-tracing-subscriber = { version = "0.3.23", default-features = false }
-web-time = "1.1.0"
-webpki-roots = "1.0.12"
-zstd = { version = "0.14.4", default-features = false }
+tokio = { version = "1.54.1", default-features = false, features = ["macros", "net", "rt-multi-thread", "signal", "test-util", "time"] }
+tokio-websockets = { version = "0.13.3", default-features = false, features = ["server", "ring"] }
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["ansi", "env-filter", "fmt", "std"] }
 
-[workspace.lints.rust]
+[[bench]]
+name = "builders"
+harness = false
+
+[[bench]]
+name = "cache"
+harness = false
+
+[[bench]]
+name = "collection"
+harness = false
+
+[[bench]]
+name = "decode"
+harness = false
+
+[[bench]]
+name = "decode_bytes"
+harness = false
+
+[[bench]]
+name = "encode"
+harness = false
+
+[[bench]]
+name = "formatters"
+harness = false
+
+[[bench]]
+name = "gateway"
+harness = false
+
+[[bench]]
+name = "interaction"
+harness = false
+
+[[bench]]
+name = "managers"
+harness = false
+required-features = ["gateway"]
+
+[[bench]]
+name = "request"
+harness = false
+
+[[bench]]
+name = "sharding"
+harness = false
+required-features = ["sharding"]
+
+[[example]]
+name = "advanced"
+required-features = ["gateway"]
+
+[[example]]
+name = "components"
+required-features = ["gateway"]
+
+[[example]]
+name = "ecosystem"
+required-features = ["gateway"]
+
+[[example]]
+name = "event_broker"
+required-features = ["gateway"]
+
+[[example]]
+name = "maxbot"
+required-features = ["gateway"]
+
+[[example]]
+name = "moderation"
+required-features = ["gateway"]
+
+[[example]]
+name = "ping"
+required-features = ["gateway"]
+
+[[example]]
+name = "slash_commands"
+required-features = ["gateway"]
+
+[lints.rust]
 unsafe_code = "deny"
 missing_docs = "allow"
 missing_debug_implementations = "warn"
@@ -73,14 +189,14 @@ unreachable_pub = "warn"
 rust_2018_idioms = { level = "warn", priority = -1 }
 unexpected_cfgs = { level = "warn", check-cfg = ["cfg(docsrs)"] }
 
-[workspace.lints.clippy]
+[lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 module_name_repetitions = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 
-[workspace.lints.rustdoc]
+[lints.rustdoc]
 broken_intra_doc_links = "deny"
 private_intra_doc_links = "warn"
 missing_crate_level_docs = "allow"
@@ -94,3 +210,7 @@ codegen-units = 1
 inherits = "release"
 lto = "thin"
 debug = "line-tables-only"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

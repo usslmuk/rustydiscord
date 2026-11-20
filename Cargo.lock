@@ -170,9 +170,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.11.2"
+version = "1.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33ef9e3e8154a45c7a95cff4c1299702106ad94062d7bb85fdc5d3a5afd91d45"
+checksum = "02f0e023adb368345ce0ca6cdfc0f24a06554468d0e8503e14a0841de79bfa69"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -257,9 +257,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.6.8"
+version = "4.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac230478587d0269d8d6998b82ae69ea51509d55df66d9e92edd1f986904cd4a"
+checksum = "844c5c0b65be192cb68d570cca1b21a6444431d24e39c084dc0336177015337c"
 dependencies = [
  "clap_builder",
 ]
@@ -486,6 +486,7 @@ dependencies = [
  "fiat-crypto 0.3.0",
  "rustc_version",
  "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -657,6 +658,7 @@ dependencies = [
  "ed25519 3.0.0",
  "sha2 0.11.1",
  "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -1851,9 +1853,9 @@ dependencies = [
 
 [[package]]
 name = "pin-project-lite"
-version = "0.2.17"
+version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
+checksum = "c938015719552d665fd0553b90d96cd7ff58e83e4c061ca99e6bb78865a72752"
 
 [[package]]
 name = "pin-utils"
@@ -2237,191 +2239,49 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "rustydiscord"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
+ "aes-gcm 0.11.1",
+ "bitflags 2.13.2",
  "bytes",
- "divan",
- "ed25519-dalek 3.0.0",
- "futures-core",
- "futures-util",
- "http-body-util",
- "hyper",
- "hyper-util",
- "mimalloc",
- "rustydiscord-brokers",
- "rustydiscord-builders",
- "rustydiscord-cache",
- "rustydiscord-collection",
- "rustydiscord-formatters",
- "rustydiscord-gateway",
- "rustydiscord-macros",
- "rustydiscord-model",
- "rustydiscord-opcodes",
- "rustydiscord-proxy",
- "rustydiscord-rest",
- "rustydiscord-util",
- "rustydiscord-voice",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-websockets",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "rustydiscord-brokers"
-version = "0.0.2"
-dependencies = [
- "tokio",
-]
-
-[[package]]
-name = "rustydiscord-builders"
-version = "0.0.2"
-dependencies = [
- "compact_str",
- "divan",
- "rustydiscord-model",
- "serde_json",
-]
-
-[[package]]
-name = "rustydiscord-cache"
-version = "0.0.2"
-dependencies = [
+ "chacha20poly1305 0.11.0",
  "compact_str",
  "dashmap",
+ "davey",
  "divan",
- "foldhash",
- "rustydiscord-model",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "rustydiscord-collection"
-version = "0.0.2"
-dependencies = [
- "divan",
- "foldhash",
- "indexmap",
-]
-
-[[package]]
-name = "rustydiscord-formatters"
-version = "0.0.2"
-dependencies = [
- "divan",
- "rustydiscord-model",
-]
-
-[[package]]
-name = "rustydiscord-gateway"
-version = "0.0.2"
-dependencies = [
- "bytes",
- "divan",
+ "ed25519-dalek 3.0.0",
  "eetf",
  "fastrand",
  "flate2",
+ "foldhash",
+ "futures-core",
  "futures-util",
- "num-bigint",
- "num-traits",
- "rustls",
- "rustls-native-certs",
- "rustydiscord-model",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-rustls",
- "tokio-websockets",
- "tracing",
- "webpki-roots",
- "zstd",
-]
-
-[[package]]
-name = "rustydiscord-macros"
-version = "0.0.2"
-
-[[package]]
-name = "rustydiscord-model"
-version = "0.0.2"
-dependencies = [
- "bitflags 2.13.2",
- "bytes",
- "compact_str",
- "divan",
- "serde",
- "serde_json",
- "web-time",
-]
-
-[[package]]
-name = "rustydiscord-opcodes"
-version = "0.0.2"
-
-[[package]]
-name = "rustydiscord-proxy"
-version = "0.0.2"
-
-[[package]]
-name = "rustydiscord-rest"
-version = "0.0.2"
-dependencies = [
- "bytes",
- "divan",
  "http",
  "http-body-util",
  "hyper",
  "hyper-rustls",
  "hyper-util",
- "rustls",
- "rustls-native-certs",
- "rustydiscord-model",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
- "web-time",
- "webpki-roots",
-]
-
-[[package]]
-name = "rustydiscord-util"
-version = "0.0.2"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "rustydiscord-voice"
-version = "0.0.2"
-dependencies = [
- "aes-gcm 0.11.1",
- "chacha20poly1305 0.11.0",
- "davey",
- "fastrand",
- "futures-util",
+ "indexmap",
+ "mimalloc",
+ "num-bigint",
+ "num-traits",
  "openmls",
  "openmls_basic_credential",
  "openmls_rust_crypto",
  "opus2",
  "rustls",
  "rustls-native-certs",
- "rustydiscord-model",
  "serde",
  "serde_json",
+ "thiserror",
  "tokio",
  "tokio-rustls",
  "tokio-websockets",
  "tracing",
+ "tracing-subscriber",
+ "web-time",
  "webpki-roots",
+ "zstd",
 ]
 
 [[package]]

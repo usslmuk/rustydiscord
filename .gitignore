@@ -5,5 +5,5 @@
 *.swp
 .DS_Store
 .env
-crates/*/tests/
+tests/
 *.log
