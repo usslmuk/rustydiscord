@@ -41,6 +41,3 @@ pub mod util;
 pub mod voice;
 pub mod webhook;
 pub mod webhook_event;
-
-pub const DISCORD_API_VERSION: u8 = 10;
-pub const TRACKED_DISCORD_JS: &str = "14.28.1";

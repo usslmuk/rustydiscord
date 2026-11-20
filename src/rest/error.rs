@@ -46,10 +46,48 @@ impl Error {
     }
 
     #[must_use]
+    pub fn route(&self) -> Option<&'static str> {
+        match &self.kind {
+            ErrorKind::Response { route, .. } => Some(route),
+            _ => None,
+        }
+    }
+
+    #[must_use]
     pub fn api_error(&self) -> Option<&ApiError> {
         match &self.kind {
             ErrorKind::Response { error, .. } => error.as_deref(),
             _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn body(&self) -> Option<&[u8]> {
+        match &self.kind {
+            ErrorKind::Response { body, .. } => body.as_deref(),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn discord_code(&self) -> Option<ErrorCode> {
+        self.api_error().map(|error| error.code)
+    }
+
+    #[must_use]
+    pub fn is_rate_limited(&self) -> bool {
+        self.status()
+            .is_some_and(|status| status == StatusCode::TOO_MANY_REQUESTS)
+    }
+
+    #[must_use]
+    pub fn is_retryable(&self) -> bool {
+        match &self.kind {
+            ErrorKind::Response { status, .. } => {
+                *status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error()
+            }
+            ErrorKind::Transport | ErrorKind::Timeout => true,
+            _ => false,
         }
     }
 }
@@ -66,11 +104,18 @@ pub enum ErrorKind {
     #[error("the request timed out")]
     Timeout,
 
-    #[error("Discord responded with {status}{}", error.as_ref().map_or_default(|error| format!(": {error}")))]
+    #[error("the request was aborted before it completed")]
+    Aborted,
+
+    #[error("Discord responded with {status} for {route}{}", error.as_ref().map_or_default(|error| format!(": {error}")))]
     Response {
         status: StatusCode,
 
+        route: &'static str,
+
         error: Option<Box<ApiError>>,
+
+        body: Option<Box<[u8]>>,
     },
 
     #[error("failed to deserialize the response body")]
@@ -245,22 +290,32 @@ mod tests {
     fn display() {
         let error = Error::new(ErrorKind::Response {
             status: StatusCode::FORBIDDEN,
+            route: "PUT /guilds/{guild_id}/members/{user_id}",
             error: Some(Box::new(ApiError {
                 code: ErrorCode::MissingPermissions,
                 message: "Missing Permissions".into(),
                 field_errors: Vec::new(),
                 errors: None,
             })),
+            body: None,
         });
         assert_eq!(
             error.to_string(),
-            "Discord responded with 403 Forbidden: Missing Permissions (code 50013)"
+            "Discord responded with 403 Forbidden for PUT /guilds/{guild_id}/members/{user_id}: Missing Permissions (code 50013)"
         );
         assert_eq!(error.status(), Some(StatusCode::FORBIDDEN));
+        assert_eq!(
+            error.route(),
+            Some("PUT /guilds/{guild_id}/members/{user_id}")
+        );
         assert_eq!(
             error.api_error().unwrap().code,
             ErrorCode::MissingPermissions
         );
+        assert_eq!(error.discord_code(), Some(ErrorCode::MissingPermissions));
+        assert!(!error.is_rate_limited());
+        assert!(!error.is_retryable());
+        assert!(error.body().is_none());
     }
 
     fn parse(json: &str) -> ApiError {
@@ -333,8 +388,41 @@ mod tests {
     }
 
     #[test]
+    fn helpers() {
+        let limited = Error::new(ErrorKind::Response {
+            status: StatusCode::TOO_MANY_REQUESTS,
+            route: "GET /gateway/bot",
+            error: None,
+            body: Some(b"{}".to_vec().into_boxed_slice()),
+        });
+        assert!(limited.is_rate_limited());
+        assert!(limited.is_retryable());
+        assert_eq!(limited.route(), Some("GET /gateway/bot"));
+        assert_eq!(limited.body(), Some(b"{}".as_slice()));
+        assert_eq!(limited.discord_code(), None);
+
+        let broken = Error::new(ErrorKind::Response {
+            status: StatusCode::BAD_GATEWAY,
+            route: "GET /gateway/bot",
+            error: None,
+            body: None,
+        });
+        assert!(!broken.is_rate_limited());
+        assert!(broken.is_retryable());
+
+        let timed_out = Error::new(ErrorKind::Timeout);
+        assert!(!timed_out.is_rate_limited());
+        assert!(timed_out.is_retryable());
+        assert_eq!(timed_out.route(), None);
+        assert_eq!(timed_out.discord_code(), None);
+
+        let refused = Error::new(ErrorKind::BuildRequest);
+        assert!(!refused.is_retryable());
+    }
+
+    #[test]
     fn size() {
-        assert!(size_of::<Error>() <= 48, "{}", size_of::<Error>());
+        assert!(size_of::<Error>() <= 96, "{}", size_of::<Error>());
     }
 
     #[test]

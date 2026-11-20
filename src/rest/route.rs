@@ -493,6 +493,12 @@ routes! {
     } => PATCH "/guilds/{guild_id}/members/@me", major: guild_id;
 
 
+    ModifyCurrentMemberNickname {
+
+        guild_id: GuildId,
+    } => PATCH "/guilds/{guild_id}/members/@me/nick", major: guild_id;
+
+
     GetGuildMemberVerification {
 
         guild_id: GuildId,
@@ -1889,7 +1895,7 @@ routes! {
     GetChannelPins {
 
         channel_id: ChannelId,
-    } => GET "/channels/{channel_id}/pins", major: channel_id;
+    } => GET "/channels/{channel_id}/messages/pins", major: channel_id;
 
 
     PinMessage {
@@ -1897,7 +1903,7 @@ routes! {
         channel_id: ChannelId,
 
         message_id: MessageId,
-    } => PUT "/channels/{channel_id}/pins/{message_id}", major: channel_id;
+    } => PUT "/channels/{channel_id}/messages/pins/{message_id}", major: channel_id;
 
 
     UnpinMessage {
@@ -1905,7 +1911,7 @@ routes! {
         channel_id: ChannelId,
 
         message_id: MessageId,
-    } => DELETE "/channels/{channel_id}/pins/{message_id}", major: channel_id;
+    } => DELETE "/channels/{channel_id}/messages/pins/{message_id}", major: channel_id;
 
 
 
@@ -2216,7 +2222,7 @@ mod tests {
                 message_id: MessageId::new(2),
             }
             .path(),
-            "/channels/1/pins/2"
+            "/channels/1/messages/pins/2"
         );
     }
 
@@ -2358,5 +2364,24 @@ mod tests {
         .bucket();
         assert!(!original.limits.global && !original.limits.burst);
         assert!(Route::GetGatewayBot.bucket().limits.global);
+    }
+
+    #[test]
+    fn route_count_covers_the_full_api_surface() {
+        const BASELINE_ROUTE_COUNT: usize = 249;
+        let count = include_str!("route.rs")
+            .lines()
+            .filter(|line| {
+                line.contains("=> GET \"/")
+                    || line.contains("=> POST \"/")
+                    || line.contains("=> PUT \"/")
+                    || line.contains("=> PATCH \"/")
+                    || line.contains("=> DELETE \"/")
+            })
+            .count();
+        assert_eq!(
+            count, BASELINE_ROUTE_COUNT,
+            "update the baseline with new routes"
+        );
     }
 }

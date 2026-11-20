@@ -1,0 +1,12 @@
+[book]
+title = "rustydiscord"
+description = "The fastest and most complete Rust library for the Discord API"
+authors = ["usslmuk"]
+
+[build]
+build-dir = "book"
+
+[output.html]
+git-repository-url = "https://github.com/usslmuk/rustydiscord"
+edit-url-template = "https://github.com/usslmuk/rustydiscord/edit/main/docs/{path}"
+site-url = "/rustydiscord/"

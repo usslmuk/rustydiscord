@@ -149,7 +149,7 @@ impl CacheConfig {
     }
 
     #[must_use]
-    pub fn rustydiscord_js() -> Self {
+    pub fn rustydiscord() -> Self {
         let mut config = Self::uniform(Limit::Unlimited);
         config.set(Resource::Message, Limit::Max(200));
         config
@@ -366,8 +366,8 @@ mod tests {
     }
 
     #[test]
-    fn the_rustydiscord_js_preset_limits_only_messages() {
-        let config = CacheConfig::rustydiscord_js();
+    fn the_rustydiscord_preset_limits_only_messages() {
+        let config = CacheConfig::rustydiscord();
         for &resource in Resource::ALL {
             let expected = if resource == Resource::Message {
                 Limit::Max(200)
@@ -416,7 +416,7 @@ mod tests {
     }
 
     #[test]
-    fn scopes_follow_the_rustydiscord_js_managers() {
+    fn scopes_follow_the_rustydiscord_managers() {
         assert_eq!(Resource::Guild.scope(), Scope::Cache);
         assert_eq!(Resource::User.scope(), Scope::Cache);
         assert_eq!(Resource::Channel.scope(), Scope::Cache);
@@ -438,7 +438,7 @@ mod tests {
     }
 
     #[test]
-    fn sweeps_default_to_rustydiscord_js() {
+    fn sweeps_default_to_rustydiscord() {
         use core::time::Duration;
 
         use super::{Sweep, SweepConfig};
@@ -453,7 +453,7 @@ mod tests {
                 Duration::from_secs(14_400)
             ))
         );
-        assert_eq!(CacheConfig::rustydiscord_js().sweepers(), &sweepers);
+        assert_eq!(CacheConfig::rustydiscord().sweepers(), &sweepers);
         let off = CacheConfig::builder().sweep_threads(None).build();
         assert_eq!(off.sweepers().threads, None);
     }

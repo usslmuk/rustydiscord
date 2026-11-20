@@ -69,8 +69,8 @@ fn message(id: u64) -> DispatchEvent {
     event
 }
 
-fn rustydiscord_js_cache<B: Backend>(backend: B) -> Cache<B> {
-    let cache = Cache::with_backend(CacheConfig::rustydiscord_js(), backend);
+fn rustydiscord_cache<B: Backend>(backend: B) -> Cache<B> {
+    let cache = Cache::with_backend(CacheConfig::rustydiscord(), backend);
     cache.update_dispatch(&GUILD_CREATE);
     for id in 1..=200 {
         cache.update_dispatch(&message(id));
@@ -158,7 +158,7 @@ mod store {
 mod update {
     use super::{
         Arc, Bencher, Cache, CacheConfig, DashMapBackend, GUILD_CREATE, black_box, hot_event,
-        message, rustydiscord_js_cache,
+        message, rustydiscord_cache,
     };
 
     const HOT: &[&str] = &[
@@ -176,14 +176,14 @@ mod update {
 
     #[divan::bench(args = HOT)]
     fn hot(bencher: Bencher<'_, '_>, name: &str) {
-        let cache = rustydiscord_js_cache(DashMapBackend::new());
+        let cache = rustydiscord_cache(DashMapBackend::new());
         let event = hot_event(name);
         bencher.bench(|| cache.update_dispatch(black_box(event)));
     }
 
     #[divan::bench]
     fn message_create_at_the_limit(bencher: Bencher<'_, '_>) {
-        let cache = rustydiscord_js_cache(DashMapBackend::new());
+        let cache = rustydiscord_cache(DashMapBackend::new());
         let mut next = 1_000;
         bencher
             .with_inputs(|| {
@@ -203,7 +203,7 @@ mod update {
     #[divan::bench(sample_count = 30, sample_size = 3)]
     fn guild_create_1000_members(bencher: Bencher<'_, '_>) {
         bencher
-            .with_inputs(|| Cache::with_config(CacheConfig::rustydiscord_js()))
+            .with_inputs(|| Cache::with_config(CacheConfig::rustydiscord()))
             .bench_local_refs(|cache| cache.update_dispatch(&GUILD_CREATE));
     }
 
@@ -228,26 +228,26 @@ mod update {
 
 mod read {
     use super::{
-        Bencher, CHANNEL, DashMapBackend, FIRST_USER, GUILD, black_box, rustydiscord_js_cache,
+        Bencher, CHANNEL, DashMapBackend, FIRST_USER, GUILD, black_box, rustydiscord_cache,
     };
     use rustydiscord::model::id::{MessageId, UserId};
 
     #[divan::bench]
     fn guild(bencher: Bencher<'_, '_>) {
-        let cache = rustydiscord_js_cache(DashMapBackend::new());
+        let cache = rustydiscord_cache(DashMapBackend::new());
         bencher.bench(|| cache.guilds().get(black_box(GUILD)));
     }
 
     #[divan::bench]
     fn member(bencher: Bencher<'_, '_>) {
-        let cache = rustydiscord_js_cache(DashMapBackend::new());
+        let cache = rustydiscord_cache(DashMapBackend::new());
         let user = UserId::new(FIRST_USER.get() + 500);
         bencher.bench(|| cache.members(black_box(GUILD)).get(black_box(user)));
     }
 
     #[divan::bench]
     fn member_missing(bencher: Bencher<'_, '_>) {
-        let cache = rustydiscord_js_cache(DashMapBackend::new());
+        let cache = rustydiscord_cache(DashMapBackend::new());
         bencher.bench(|| {
             cache
                 .members(black_box(GUILD))
@@ -257,14 +257,14 @@ mod read {
 
     #[divan::bench]
     fn presence(bencher: Bencher<'_, '_>) {
-        let cache = rustydiscord_js_cache(DashMapBackend::new());
+        let cache = rustydiscord_cache(DashMapBackend::new());
         let user = UserId::new(FIRST_USER.get() + 500);
         bencher.bench(|| cache.presences(black_box(GUILD)).get(black_box(user)));
     }
 
     #[divan::bench]
     fn message(bencher: Bencher<'_, '_>) {
-        let cache = rustydiscord_js_cache(DashMapBackend::new());
+        let cache = rustydiscord_cache(DashMapBackend::new());
         bencher.bench(|| {
             cache
                 .messages(black_box(CHANNEL))
@@ -274,19 +274,19 @@ mod read {
 
     #[divan::bench]
     fn all_members(bencher: Bencher<'_, '_>) {
-        let cache = rustydiscord_js_cache(DashMapBackend::new());
+        let cache = rustydiscord_cache(DashMapBackend::new());
         bencher.bench(|| cache.members(black_box(GUILD)).values());
     }
 
     #[divan::bench]
     fn channels_in_guild(bencher: Bencher<'_, '_>) {
-        let cache = rustydiscord_js_cache(DashMapBackend::new());
+        let cache = rustydiscord_cache(DashMapBackend::new());
         bencher.bench(|| cache.channels().in_guild(black_box(GUILD)));
     }
 }
 
 mod permissions {
-    use super::{Bencher, DashMapBackend, FIRST_USER, GUILD, black_box, rustydiscord_js_cache};
+    use super::{Bencher, DashMapBackend, FIRST_USER, GUILD, black_box, rustydiscord_cache};
     use rustydiscord::cache::Cache;
     use rustydiscord::model::{
         channel::Overwrite,
@@ -298,7 +298,7 @@ mod permissions {
     const MEMBER: UserId = UserId::new(FIRST_USER.get() + 500);
 
     fn cache() -> Cache {
-        let cache = rustydiscord_js_cache(DashMapBackend::new());
+        let cache = rustydiscord_cache(DashMapBackend::new());
         let everyone: Role = serde_json::from_value(serde_json::json!({
             "id": GUILD.to_string(), "name": "@everyone", "color": 0, "hoist": false,
             "position": 0, "permissions": "1024", "managed": false, "mentionable": false,
@@ -362,19 +362,19 @@ mod permissions {
 }
 
 mod sweep {
-    use super::{Bencher, CacheConfig, DashMapBackend, Duration, message, rustydiscord_js_cache};
+    use super::{Bencher, CacheConfig, DashMapBackend, Duration, message, rustydiscord_cache};
     use rustydiscord::cache::Cache;
 
     #[divan::bench]
     fn messages_none_old(bencher: Bencher<'_, '_>) {
-        let cache = rustydiscord_js_cache(DashMapBackend::new());
+        let cache = rustydiscord_cache(DashMapBackend::new());
         let century = Duration::from_hours(100 * 365 * 24);
         bencher.bench(|| cache.sweep_messages_older_than(century));
     }
 
     #[divan::bench]
     fn members_none(bencher: Bencher<'_, '_>) {
-        let cache = rustydiscord_js_cache(DashMapBackend::new());
+        let cache = rustydiscord_cache(DashMapBackend::new());
         bencher.bench(|| cache.sweep_members(|_, member| member.user.bot));
     }
 
@@ -382,7 +382,7 @@ mod sweep {
     fn messages_all_2000(bencher: Bencher<'_, '_>) {
         bencher
             .with_inputs(|| {
-                let cache = Cache::with_config(CacheConfig::rustydiscord_js());
+                let cache = Cache::with_config(CacheConfig::rustydiscord());
                 for id in 1..=2_000_u64 {
                     let mut event = message(id);
                     if let rustydiscord::model::gateway::DispatchEvent::MessageCreate(message) =
@@ -403,27 +403,27 @@ use rustydiscord::cache::DashMapBackend;
 mod hasher {
     use super::{
         Bencher, DashMapBackend, FIRST_USER, GUILD, SipBackend, black_box, hot_event,
-        rustydiscord_js_cache,
+        rustydiscord_cache,
     };
     use rustydiscord::model::id::UserId;
 
     #[divan::bench(types = [DashMapBackend, SipBackend])]
     fn member_get<B: rustydiscord::cache::Backend + Default>(bencher: Bencher<'_, '_>) {
-        let cache = rustydiscord_js_cache(B::default());
+        let cache = rustydiscord_cache(B::default());
         let user = UserId::new(FIRST_USER.get() + 500);
         bencher.bench(|| cache.members(black_box(GUILD)).get(black_box(user)));
     }
 
     #[divan::bench(types = [DashMapBackend, SipBackend])]
     fn presence_update<B: rustydiscord::cache::Backend + Default>(bencher: Bencher<'_, '_>) {
-        let cache = rustydiscord_js_cache(B::default());
+        let cache = rustydiscord_cache(B::default());
         let event = hot_event("PRESENCE_UPDATE");
         bencher.bench(|| cache.update_dispatch(black_box(event)));
     }
 
     #[divan::bench(types = [DashMapBackend, SipBackend])]
     fn guild_member_update<B: rustydiscord::cache::Backend + Default>(bencher: Bencher<'_, '_>) {
-        let cache = rustydiscord_js_cache(B::default());
+        let cache = rustydiscord_cache(B::default());
         let event = hot_event("GUILD_MEMBER_UPDATE");
         bencher.bench(|| cache.update_dispatch(black_box(event)));
     }
@@ -435,7 +435,7 @@ mod hasher {
         bencher
             .with_inputs(|| {
                 rustydiscord::cache::Cache::with_backend(
-                    rustydiscord::cache::CacheConfig::rustydiscord_js(),
+                    rustydiscord::cache::CacheConfig::rustydiscord(),
                     B::default(),
                 )
             })

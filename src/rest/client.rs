@@ -1,4 +1,9 @@
-use core::{fmt, pin::Pin, time::Duration};
+use core::{
+    fmt,
+    pin::Pin,
+    sync::atomic::{AtomicBool, Ordering},
+    time::Duration,
+};
 use std::sync::Arc;
 
 use crate::model::{guild::WidgetStyle, id::GuildId, rest::FileUpload};
@@ -8,25 +13,100 @@ use http::{
     header::{AUTHORIZATION, CONTENT_TYPE, USER_AGENT},
 };
 use serde::{Serialize, de::DeserializeOwned};
+use tokio::sync::Notify;
 
 use crate::rest::{
     cdn::{self, Cdn},
     error::{ApiError, BoxError, Error, ErrorKind, RateLimitedBody},
+    metrics::RestMetrics,
     multipart::{Form, PreparedBody},
     query::{Query, QueryWriter},
     ratelimit::{BucketState, InvalidRequests, RateLimitHeaders, RateLimiter},
-    route::{self, BucketRoute, Limits, Route},
+    route::{self, BucketRoute, Route},
     transport::{Body, Instant, Transport},
 };
 
 const AUDIT_LOG_REASON: HeaderName = HeaderName::from_static("x-audit-log-reason");
 
-pub const DEFAULT_API: &str = "https://discord.com/api";
+pub const DEFAULT_API: &str = "https://discord.com/api/v10";
 
 pub(crate) fn boxed<'a, T>(
     future: impl Future<Output = T> + Send + 'a,
 ) -> Pin<Box<dyn Future<Output = T> + Send + 'a>> {
     Box::pin(future)
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct AbortHandle {
+    state: Arc<AbortState>,
+}
+
+#[derive(Debug, Default)]
+struct AbortState {
+    tripped: AtomicBool,
+    notify: Notify,
+}
+
+impl AbortHandle {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn abort(&self) {
+        self.state.tripped.store(true, Ordering::SeqCst);
+        self.state.notify.notify_one();
+    }
+
+    #[must_use]
+    pub fn is_aborted(&self) -> bool {
+        self.state.tripped.load(Ordering::SeqCst)
+    }
+
+    pub(crate) async fn cancelled(&self) {
+        while !self.is_aborted() {
+            self.state.notify.notified().await;
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RetryPolicy {
+    pub max_retries: u8,
+
+    pub base: Duration,
+
+    pub cap: Duration,
+
+    pub jitter: bool,
+}
+
+impl Default for RetryPolicy {
+    fn default() -> Self {
+        Self {
+            max_retries: 3,
+            base: Duration::from_millis(500),
+            cap: Duration::from_secs(30),
+            jitter: true,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RateLimited {
+    pub route: &'static str,
+
+    pub global: bool,
+
+    pub scope: Option<String>,
+
+    pub retry_after: Duration,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RateLimitAction {
+    Wait,
+    Abort,
 }
 
 fn decode<T: DeserializeOwned>(body: &[u8]) -> Result<T, Error> {
@@ -40,6 +120,8 @@ pub struct Rest {
     inner: Arc<Inner>,
 }
 
+pub(crate) type RateLimitHook = Arc<dyn Fn(&RateLimited) -> RateLimitAction + Send + Sync>;
+
 struct Pending {
     bucket: BucketRoute,
     uri: Uri,
@@ -47,6 +129,21 @@ struct Pending {
     body: PreparedBody,
     method: Method,
     authenticated: bool,
+    abort: Option<AbortHandle>,
+}
+
+pub(crate) async fn cancellable<T>(
+    abort: Option<&AbortHandle>,
+    task: impl Future<Output = T>,
+) -> Option<T> {
+    match abort {
+        None => Some(task.await),
+        Some(handle) => tokio::select! {
+            biased;
+            () = handle.cancelled() => None,
+            output = task => Some(output),
+        },
+    }
 }
 
 fn raw_authenticated(path: &str) -> bool {
@@ -64,9 +161,11 @@ struct Inner {
     base: String,
     user_agent: HeaderValue,
     timeout: Duration,
-    retries: u8,
+    retry: RetryPolicy,
     ratelimiter: RateLimiter,
     invalid: InvalidRequests,
+    metrics: RestMetrics,
+    on_rate_limit: Option<RateLimitHook>,
 
     invalid_request_limit: u32,
     cdn: Cdn,
@@ -91,7 +190,7 @@ impl fmt::Debug for Rest {
                 },
             )
             .field("timeout", &self.inner.timeout)
-            .field("retries", &self.inner.retries)
+            .field("retry", &self.inner.retry)
             .finish_non_exhaustive()
     }
 }
@@ -128,6 +227,11 @@ impl Rest {
         self.inner.invalid.count(Instant::now())
     }
 
+    #[must_use]
+    pub fn metrics(&self) -> &RestMetrics {
+        &self.inner.metrics
+    }
+
     pub fn request<'a, T: DeserializeOwned + 'a>(
         &'a self,
         request: Request<'a>,
@@ -147,6 +251,7 @@ impl Rest {
     pub(crate) async fn execute(&self, request: Request<'_>) -> Result<(StatusCode, Bytes), Error> {
         let inner = &*self.inner;
         let route = request.route;
+        let abort = request.abort.clone();
         let pending = Pending {
             bucket: route.bucket(),
             uri: inner.uri(route, request.query)?,
@@ -154,6 +259,7 @@ impl Rest {
             body: request.prepare_body(),
             method: route.method(),
             authenticated: route.authenticated(),
+            abort,
         };
         self.execute_pending(pending).await
     }
@@ -189,6 +295,7 @@ impl Rest {
             body: PreparedBody::new(body, &form),
             method,
             authenticated: raw_authenticated(path),
+            abort: None,
         };
         let (_, body) = self.execute_pending(pending).await?;
         decode(&body)
@@ -203,6 +310,7 @@ impl Rest {
             body,
             method,
             authenticated,
+            abort,
         } = pending;
         let limits = bucket_route.limits;
         let template = bucket_route.template;
@@ -210,35 +318,64 @@ impl Rest {
         let mut attempt: u8 = 0;
         loop {
             inner.check_invalid_requests()?;
+            if abort.as_ref().is_some_and(AbortHandle::is_aborted) {
+                return Err(Error::new(ErrorKind::Aborted));
+            }
             let bucket = inner.ratelimiter.bucket(bucket_route);
 
             let mut state = if limits.burst {
                 None
             } else {
                 let mut state = bucket.state.lock().await;
-                state
-                    .wait(inner.ratelimiter.offset(), &*inner.transport)
-                    .await;
+                if state
+                    .wait(
+                        inner.ratelimiter.offset(),
+                        &*inner.transport,
+                        abort.as_ref(),
+                    )
+                    .await
+                {
+                    return Err(Error::new(ErrorKind::Aborted));
+                }
                 Some(state)
             };
-            if limits.global {
-                inner.ratelimiter.acquire_global(&*inner.transport).await;
+            if limits.global
+                && inner
+                    .ratelimiter
+                    .acquire_global(&*inner.transport, abort.as_ref())
+                    .await
+            {
+                return Err(Error::new(ErrorKind::Aborted));
             }
 
             let http_request =
                 inner.build_request(method.clone(), authenticated, &uri, reason.as_ref(), &body)?;
             let started = Instant::now();
-            let response = match timeout(&*inner.transport, inner.timeout, http_request).await {
-                Ok(Ok(response)) => response,
-                failed => {
+            inner.metrics.record_request();
+            let send = timeout(&*inner.transport, inner.timeout, http_request);
+            let response = match cancellable(abort.as_ref(), send).await {
+                None => {
+                    drop(state);
+                    return Err(Error::new(ErrorKind::Aborted));
+                }
+                Some(Ok(Ok(response))) => response,
+                Some(failed) => {
                     drop(state);
                     let error = match failed {
                         Ok(Err(source)) => Error::with_source(ErrorKind::Transport, source),
                         _ => Error::new(ErrorKind::Timeout),
                     };
-                    if attempt < inner.retries {
+                    if attempt < inner.retry.max_retries {
                         attempt += 1;
+                        inner.metrics.record_retry();
                         tracing::warn!(route = template, attempt, %error, "request failed, retrying");
+                        let backoff = backoff_delay(attempt, &inner.retry);
+                        if cancellable(abort.as_ref(), inner.transport.sleep(backoff))
+                            .await
+                            .is_none()
+                        {
+                            return Err(Error::new(ErrorKind::Aborted));
+                        }
                         continue;
                     }
                     return Err(error);
@@ -250,7 +387,6 @@ impl Rest {
             match self
                 .settle_response(
                     template,
-                    limits,
                     bucket_route,
                     &mut state,
                     &mut attempt,
@@ -259,6 +395,7 @@ impl Rest {
                     parts.status,
                     &RateLimitHeaders::parse(&parts.headers),
                     body,
+                    abort.as_ref(),
                 )
                 .await
             {
@@ -275,7 +412,6 @@ impl Rest {
     async fn settle_response(
         &self,
         template: &'static str,
-        limits: Limits,
         bucket_route: BucketRoute,
         state: &mut Option<tokio::sync::MutexGuard<'_, BucketState>>,
         attempt: &mut u8,
@@ -284,6 +420,7 @@ impl Rest {
         status: StatusCode,
         headers: &RateLimitHeaders<'_>,
         body: Bytes,
+        abort: Option<&AbortHandle>,
     ) -> Settled {
         let inner = &*self.inner;
         if let Some(hash) = headers.bucket {
@@ -295,6 +432,7 @@ impl Rest {
         if is_invalid(status, headers) {
             inner.invalid.record(now);
         }
+        inner.metrics.record_status(status.as_u16());
         tracing::debug!(
             route = template,
             status = status.as_u16(),
@@ -314,34 +452,80 @@ impl Rest {
                     retry_after_ms = millis(retry_after),
                     "rate limited by Discord, retrying"
                 );
+                if global {
+                    inner.ratelimiter.pause_global(retry_after);
+                }
+                let waiting = inner
+                    .on_rate_limit
+                    .as_ref()
+                    .map_or(RateLimitAction::Wait, |hook| {
+                        hook(&RateLimited {
+                            route: template,
+                            global,
+                            scope: headers.scope.map(str::to_owned),
+                            retry_after,
+                        })
+                    });
+                if waiting == RateLimitAction::Abort {
+                    return response_error(template, status, &body);
+                }
+                let exhausted = matches!(state, Some(state) if state.remaining() == Some(0));
                 match state {
-                    _ if global && limits.global => inner.ratelimiter.pause_global(retry_after),
-                    Some(state) => state.exhaust_for(retry_after, now),
-                    None => {
-                        inner
-                            .transport
-                            .sleep(retry_after + inner.ratelimiter.offset())
-                            .await;
+                    Some(state) if exhausted => state.exhaust_for(retry_after, now),
+                    _ => {
+                        drop(state.take());
+                        if cancellable(
+                            abort,
+                            inner
+                                .transport
+                                .sleep(retry_after + inner.ratelimiter.offset()),
+                        )
+                        .await
+                        .is_none()
+                        {
+                            return Settled::Done(Err(Error::new(ErrorKind::Aborted)));
+                        }
                     }
                 }
+                inner.metrics.record_retry();
                 Settled::Retry
             }
-            status if status.is_server_error() && *attempt < inner.retries => {
+            status if status.is_server_error() && *attempt < inner.retry.max_retries => {
                 *attempt += 1;
+                inner.metrics.record_retry();
                 tracing::warn!(
                     route = template,
                     status = status.as_u16(),
                     attempt = *attempt,
                     "server error, retrying"
                 );
+                let backoff = backoff_delay(*attempt, &inner.retry);
+                if cancellable(abort, inner.transport.sleep(backoff))
+                    .await
+                    .is_none()
+                {
+                    return Settled::Done(Err(Error::new(ErrorKind::Aborted)));
+                }
                 Settled::Retry
             }
-            status => {
-                let error = serde_json::from_slice::<ApiError>(&body).ok().map(Box::new);
-                Settled::Done(Err(Error::new(ErrorKind::Response { status, error })))
-            }
+            status => response_error(template, status, &body),
         }
     }
+}
+
+fn response_error(template: &'static str, status: StatusCode, body: &Bytes) -> Settled {
+    let error = serde_json::from_slice::<ApiError>(body).ok().map(Box::new);
+    let body = (!body.is_empty()).then(|| {
+        body.slice(..body.len().min(4096))
+            .to_vec()
+            .into_boxed_slice()
+    });
+    Settled::Done(Err(Error::new(ErrorKind::Response {
+        status,
+        route: template,
+        error,
+        body,
+    })))
 }
 
 enum Settled {
@@ -409,6 +593,17 @@ impl Inner {
     }
 }
 
+fn strip_version(api: &str) -> &str {
+    let api = api.trim_end_matches('/');
+    match api.rsplit_once("/v") {
+        Some((root, version))
+            if !root.is_empty() && version.bytes().all(|byte| byte.is_ascii_digit()) =>
+        {
+            root
+        }
+        _ => api,
+    }
+}
 fn reason_header(reason: &str) -> HeaderValue {
     let mut encoded = String::with_capacity(reason.len());
     route::write_text(&mut encoded, reason);
@@ -441,6 +636,27 @@ fn millis(duration: Duration) -> u64 {
     u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
 }
 
+fn backoff_delay(attempt: u8, policy: &RetryPolicy) -> Duration {
+    let capped = policy
+        .base
+        .saturating_mul(1 << attempt.min(6))
+        .min(policy.cap);
+    if !policy.jitter {
+        return capped;
+    }
+    let half_ms = u64::try_from(capped.as_millis() / 2).unwrap_or(u64::MAX);
+    capped + Duration::from_millis(jitter_ms(half_ms))
+}
+
+fn jitter_ms(ceiling_ms: u64) -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(ceiling_ms / 2, |elapsed| {
+            u64::from(elapsed.subsec_nanos()) % ceiling_ms.saturating_add(1)
+        })
+}
+
 async fn timeout(
     transport: &dyn Transport,
     limit: Duration,
@@ -470,6 +686,8 @@ pub struct Request<'a> {
     form_file: Option<(&'static str, &'a FileUpload)>,
 
     form_text: &'a [(&'static str, &'a str)],
+
+    abort: Option<AbortHandle>,
 }
 
 impl<'a> Request<'a> {
@@ -484,6 +702,7 @@ impl<'a> Request<'a> {
             files: &[],
             form_file: None,
             form_text: &[],
+            abort: None,
         }
     }
 
@@ -496,6 +715,12 @@ impl<'a> Request<'a> {
     #[must_use]
     pub const fn files(mut self, files: &'a [FileUpload]) -> Self {
         self.files = files;
+        self
+    }
+
+    #[must_use]
+    pub fn abort_on(mut self, handle: AbortHandle) -> Self {
+        self.abort = Some(handle);
         self
     }
 
@@ -584,7 +809,7 @@ pub struct RestBuilder {
     api: String,
     version: u8,
     timeout: Duration,
-    retries: u8,
+    retry: RetryPolicy,
     global_requests_per_second: u32,
     offset: Duration,
     user_agent_appendix: Option<String>,
@@ -592,6 +817,7 @@ pub struct RestBuilder {
     cdn: String,
     media_proxy: String,
     transport: Option<Arc<dyn Transport>>,
+    on_rate_limit: Option<RateLimitHook>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -623,7 +849,7 @@ impl fmt::Debug for RestBuilder {
             .field("api", &self.api)
             .field("version", &self.version)
             .field("timeout", &self.timeout)
-            .field("retries", &self.retries)
+            .field("retry", &self.retry)
             .field(
                 "global_requests_per_second",
                 &self.global_requests_per_second,
@@ -634,6 +860,10 @@ impl fmt::Debug for RestBuilder {
             .field("cdn", &self.cdn)
             .field("media_proxy", &self.media_proxy)
             .field("transport", &self.transport.as_ref().map(|_| "<custom>"))
+            .field(
+                "on_rate_limit",
+                &self.on_rate_limit.as_ref().map(|_| "<hook>"),
+            )
             .finish()
     }
 }
@@ -645,7 +875,7 @@ impl Default for RestBuilder {
             api: DEFAULT_API.to_owned(),
             version: crate::model::gateway::API_VERSION,
             timeout: Duration::from_secs(15),
-            retries: 3,
+            retry: RetryPolicy::default(),
             global_requests_per_second: 50,
             offset: Duration::from_millis(50),
             user_agent_appendix: None,
@@ -653,6 +883,7 @@ impl Default for RestBuilder {
             cdn: cdn::DEFAULT_CDN.to_owned(),
             media_proxy: cdn::DEFAULT_MEDIA_PROXY.to_owned(),
             transport: None,
+            on_rate_limit: None,
         }
     }
 }
@@ -694,7 +925,20 @@ impl RestBuilder {
     }
 
     pub const fn retries(mut self, retries: u8) -> Self {
-        self.retries = retries;
+        self.retry.max_retries = retries;
+        self
+    }
+
+    pub fn retry_policy(mut self, policy: RetryPolicy) -> Self {
+        self.retry = policy;
+        self
+    }
+
+    pub fn on_rate_limit(
+        mut self,
+        hook: impl Fn(&RateLimited) -> RateLimitAction + Send + Sync + 'static,
+    ) -> Self {
+        self.on_rate_limit = Some(Arc::new(hook));
         self
     }
 
@@ -761,13 +1005,15 @@ impl RestBuilder {
             inner: Arc::new(Inner {
                 transport,
                 token,
-                base: format!("{}/v{}", self.api.trim_end_matches('/'), self.version),
+                base: format!("{}/v{}", strip_version(&self.api), self.version),
                 user_agent: HeaderValue::try_from(user_agent)
                     .expect("the user agent appendix contains invalid header characters"),
                 timeout: self.timeout,
-                retries: self.retries,
+                retry: self.retry,
                 ratelimiter: RateLimiter::new(self.global_requests_per_second, self.offset),
                 invalid: InvalidRequests::new(),
+                metrics: RestMetrics::default(),
+                on_rate_limit: self.on_rate_limit,
                 invalid_request_limit: self.invalid_request_limit,
                 cdn: Cdn::new(self.cdn, self.media_proxy),
             }),

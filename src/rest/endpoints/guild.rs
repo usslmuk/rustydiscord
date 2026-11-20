@@ -13,10 +13,10 @@ use crate::model::{
         ActiveThreads, AddGuildMember, BeginGuildPrune, BulkBanResponse, BulkGuildBan, CreateGuild,
         CreateGuildBan, CreateGuildChannel, CreateGuildRole, GetGuild, GetGuildBans,
         GetGuildPruneCount, GuildMembershipScreening, ListGuildMembers, ModifyCurrentMember,
-        ModifyGuild, ModifyGuildChannelPosition, ModifyGuildIncidentActions, ModifyGuildMember,
-        ModifyGuildMembershipScreening, ModifyGuildMfaLevel, ModifyGuildOnboarding,
-        ModifyGuildRole, ModifyGuildRolePosition, ModifyGuildWelcomeScreen, ModifyGuildWidget,
-        SearchGuildMembers, VanityUrl,
+        ModifyCurrentMemberNickname, ModifyGuild, ModifyGuildChannelPosition,
+        ModifyGuildIncidentActions, ModifyGuildMember, ModifyGuildMembershipScreening,
+        ModifyGuildMfaLevel, ModifyGuildOnboarding, ModifyGuildRole, ModifyGuildRolePosition,
+        ModifyGuildWelcomeScreen, ModifyGuildWidget, SearchGuildMembers, VanityUrl,
     },
     voice::VoiceRegion,
 };
@@ -279,6 +279,22 @@ impl Rest {
         boxed(async move {
             self.call(
                 Request::new(Route::ModifyCurrentMember { guild_id })
+                    .json(body)?
+                    .reason(reason),
+            )
+            .await
+        })
+    }
+
+    pub fn modify_current_member_nickname<'a>(
+        &'a self,
+        guild_id: GuildId,
+        body: &'a ModifyCurrentMemberNickname,
+        reason: Option<&'a str>,
+    ) -> impl Future<Output = Result<ModifyCurrentMemberNickname, Error>> + Send + 'a {
+        boxed(async move {
+            self.call(
+                Request::new(Route::ModifyCurrentMemberNickname { guild_id })
                     .json(body)?
                     .reason(reason),
             )

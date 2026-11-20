@@ -317,6 +317,7 @@ impl Query for GetInvite {
             "guild_scheduled_event_id",
             self.guild_scheduled_event_id.as_ref(),
         );
+        query.optional("with_expiration", self.with_expiration.as_ref());
     }
 }
 

@@ -9,6 +9,8 @@
 </p>
 <h1 align="center">rustydiscord</h1>
 <p align="center">The fastest and most complete Rust library for the Discord API</p>
+<p align="center">Discord API v10 and Gateway v10</p>
+<p align="center"><a href="https://usslmuk.github.io/rustydiscord/">Documentation</a></p>
 
 ## Installation
 
@@ -18,10 +20,10 @@ cargo add rustydiscord
 
 ```toml
 [dependencies]
-rustydiscord = "0.0.3"
+rustydiscord = "0.0.4"
 ```
 
-Requires Rust 1.89 or newer.
+Requires Rust 1.89 or newer
 
 ## Example
 
@@ -55,6 +57,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+## Features
+
+- **Gateway**: Sharding, reconnects that pick up where they left off, zlib/zstd/ETF support, every event typed
+- **REST**: All 249 API routes typed, rate limits handled per bucket with backoff, request metrics included
+- **Cache**: Caches everything the gateway sends, swap the backend if you want
+- **Builders**: Commands, components, embeds, modals. Checked before anything hits the API
+- **Voice**: Join voice, play and receive audio. Encrypted
+- **Collectors and managers**: Wait on messages, buttons and events without writing the plumbing yourself
+- **HTTP interactions**: Run a bot on webhooks alone, signatures verified, no gateway needed
+- **Formatters**: Timestamps, mentions, markdown, escaping. Done right
+
+## Coverage
+
+100% coverage of the Discord REST API routes and gateway events, matching discord.js
 
 ## Benchmarks
 

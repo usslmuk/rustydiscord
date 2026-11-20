@@ -94,6 +94,12 @@ pub struct ModifyGuild {
 
     #[serde(skip_serializing_if = "Patch::is_keep")]
     pub safety_alerts_channel_id: Patch<ChannelId>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region: Option<CompactString>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner_id: Option<UserId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
@@ -328,6 +334,13 @@ pub struct ModifyCurrentMember {
     pub bio: Patch<CompactString>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct ModifyCurrentMemberNickname {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nick: Option<CompactString>,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub struct GetGuildBans {
@@ -382,6 +395,9 @@ pub struct CreateGuildRole {
     pub permissions: Option<Permissions>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<u32>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub colors: Option<RoleColors>,
 
     #[serde(skip_serializing_if = "core::ops::Not::not")]
@@ -424,6 +440,9 @@ pub struct ModifyGuildRole {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub permissions: Option<Permissions>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<u32>,
 
     #[serde(skip_serializing_if = "Patch::is_keep")]
     pub colors: Patch<RoleColors>,
@@ -713,6 +732,12 @@ pub struct CreateGuild {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preferred_locale: Option<Locale>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region: Option<CompactString>,
+
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub roles: Vec<CreateGuildRole>,
 }
 
 impl CreateGuild {

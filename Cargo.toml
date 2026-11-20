@@ -3,9 +3,10 @@ name = "rustydiscord"
 description = "The fastest and most complete Rust library for the Discord API"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/usslmuk/rustydiscord"
+homepage = "https://github.com/usslmuk/rustydiscord"
 keywords = ["discord-bot", "discord-api", "discord-api-v10", "discord-rust", "discord-gateway"]
 categories = ["api-bindings", "asynchronous", "network-programming"]
-version = "0.0.3"
+version = "0.0.4"
 edition = "2024"
 rust-version = "1.100.0"
 

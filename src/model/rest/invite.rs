@@ -8,6 +8,8 @@ pub struct GetInvite {
     pub with_counts: Option<bool>,
 
     pub guild_scheduled_event_id: Option<ScheduledEventId>,
+
+    pub with_expiration: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]

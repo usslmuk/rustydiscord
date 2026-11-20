@@ -15,7 +15,10 @@ mod tls;
 mod transport;
 
 pub use self::{
-    client::{DEFAULT_API, Request, Rest, RestBuilder},
+    client::{
+        AbortHandle, DEFAULT_API, RateLimitAction, RateLimited, Request, Rest, RestBuilder,
+        RetryPolicy,
+    },
     error::{ApiError, Error, ErrorKind, FieldError},
     route::{ReactionEmoji, Route},
     transport::{Body, BoxFuture, Transport, TransportKind, transport_kind},

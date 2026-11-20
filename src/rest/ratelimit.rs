@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::rest::{
+    client::{AbortHandle, cancellable},
     error::seconds,
     route::BucketRoute,
     transport::{Instant, Transport, sleep_until},
@@ -117,8 +118,12 @@ impl RateLimiter {
         }
     }
 
-    pub(crate) async fn acquire_global(&self, transport: &dyn Transport) {
-        self.global.acquire(self.offset, transport).await;
+    pub(crate) async fn acquire_global(
+        &self,
+        transport: &dyn Transport,
+        abort: Option<&AbortHandle>,
+    ) -> bool {
+        self.global.acquire(self.offset, transport, abort).await
     }
 
     pub(crate) fn pause_global(&self, duration: Duration) {
@@ -142,7 +147,16 @@ pub(crate) struct BucketState {
 }
 
 impl BucketState {
-    pub(crate) async fn wait(&mut self, offset: Duration, transport: &dyn Transport) {
+    pub(crate) const fn remaining(&self) -> Option<u32> {
+        self.remaining
+    }
+
+    pub(crate) async fn wait(
+        &mut self,
+        offset: Duration,
+        transport: &dyn Transport,
+        abort: Option<&AbortHandle>,
+    ) -> bool {
         if self.remaining == Some(0)
             && let Some(reset_at) = self.reset_at
         {
@@ -152,11 +166,17 @@ impl BucketState {
                         u64::try_from((reset_at - Instant::now()).as_millis()).unwrap_or(u64::MAX),
                     "rate-limit bucket exhausted, waiting for reset"
                 );
-                sleep_until(transport, reset_at + offset).await;
+                if cancellable(abort, sleep_until(transport, reset_at + offset))
+                    .await
+                    .is_none()
+                {
+                    return true;
+                }
             }
             self.remaining = None;
             self.reset_at = None;
         }
+        false
     }
 
     pub(crate) fn update(&mut self, headers: &RateLimitHeaders<'_>, now: Instant) {
@@ -318,7 +338,12 @@ impl GlobalLimiter {
         }
     }
 
-    async fn acquire(&self, offset: Duration, transport: &dyn Transport) {
+    async fn acquire(
+        &self,
+        offset: Duration,
+        transport: &dyn Transport,
+        abort: Option<&AbortHandle>,
+    ) -> bool {
         let window = WINDOW + offset;
         loop {
             let wait_until = {
@@ -329,14 +354,14 @@ impl GlobalLimiter {
                     _ => {
                         state.paused_until = None;
                         if self.per_second == 0 {
-                            return;
+                            return false;
                         }
                         while state.sent.front().is_some_and(|&sent| sent + window <= now) {
                             state.sent.pop_front();
                         }
                         if state.sent.len() < self.per_second as usize {
                             state.sent.push_back(now);
-                            return;
+                            return false;
                         }
                         state.sent.front().map(|&oldest| oldest + window)
                     }
@@ -344,7 +369,12 @@ impl GlobalLimiter {
             };
             if let Some(until) = wait_until {
                 tracing::debug!("global rate limit reached, waiting");
-                sleep_until(transport, until).await;
+                if cancellable(abort, sleep_until(transport, until))
+                    .await
+                    .is_none()
+                {
+                    return true;
+                }
             }
         }
     }
@@ -440,7 +470,9 @@ mod tests {
         let start = Instant::now();
         let mut sent = Vec::new();
         for _ in 0..5 {
-            limiter.acquire(Duration::from_millis(50), &Tokio).await;
+            limiter
+                .acquire(Duration::from_millis(50), &Tokio, None)
+                .await;
             sent.push(start.elapsed());
         }
 
@@ -458,7 +490,7 @@ mod tests {
             if round % 7 == 0 {
                 tokio::time::sleep(Duration::from_millis(round % 230)).await;
             }
-            limiter.acquire(Duration::ZERO, &Tokio).await;
+            limiter.acquire(Duration::ZERO, &Tokio, None).await;
             sent.push(start.elapsed());
         }
         let mut first = 0;
@@ -481,7 +513,9 @@ mod tests {
         let limiter = GlobalLimiter::new(0);
         limiter.pause(Duration::from_millis(1500));
         let start = Instant::now();
-        limiter.acquire(Duration::from_millis(50), &Tokio).await;
+        limiter
+            .acquire(Duration::from_millis(50), &Tokio, None)
+            .await;
         assert_eq!(start.elapsed(), Duration::from_millis(1550));
     }
 
@@ -490,11 +524,11 @@ mod tests {
         let mut state = BucketState::default();
         state.exhaust_for(Duration::from_millis(300), Instant::now());
         let start = Instant::now();
-        state.wait(Duration::from_millis(50), &Tokio).await;
+        state.wait(Duration::from_millis(50), &Tokio, None).await;
         assert_eq!(start.elapsed(), Duration::from_millis(350));
 
         let start = Instant::now();
-        state.wait(Duration::from_millis(50), &Tokio).await;
+        state.wait(Duration::from_millis(50), &Tokio, None).await;
         assert_eq!(start.elapsed(), Duration::ZERO);
     }
 

@@ -23,6 +23,9 @@ pub struct ModifyGuildChannel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<CompactString>,
 
+    #[serde(skip_serializing_if = "Patch::is_keep")]
+    pub icon: Patch<ImageData>,
+
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     pub kind: Option<ChannelType>,
 
